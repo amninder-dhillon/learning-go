@@ -13,16 +13,16 @@ import (
 	"golang.org/x/net/html"
 )
 
+var re = regexp.MustCompile(`^/wiki/([A-Za-z _]+):(.+)$`) //To match wikipedia namespaces
 func normalizeURL(u *url.URL) string {
 	u.Fragment = ""
 	u.RawQuery = ""
 	return strings.TrimSuffix(u.String(), "/")
 }
 
-func extractLinks(respBody *html.Node, currUrl string, q *list.List, seen map[string]struct{}, allowedHost string) error {
+func extractLinks(respBody *html.Node, currURL string, q *list.List, seen map[string]struct{}, allowedHost string) error {
 
-	baseURL, err := url.Parse(currUrl)
-	re := regexp.MustCompile(`^/wiki/([A-Za-z _]+):(.+)$`) //To match wikipedia namespaces
+	baseURL, err := url.Parse(currURL)
 
 	if err != nil {
 		return fmt.Errorf("Error parsing the URL: %w", err)
@@ -113,38 +113,49 @@ func getURL(client *http.Client, curr string) (*html.Node, error) {
 }
 func main() {
 	seen := make(map[string]struct{})
-	maxPages := 100
-	totalPages := 0
+	//maxPages := 100
+	maxLevels := 2
+	currentLevel := 0
+	//totalPages := 0
 	const delay = 250 * time.Millisecond
-	startUrl := "https://en.wikipedia.org/wiki/Punjab"
+	startURL := "https://en.wikipedia.org/wiki/Miss_Meyers"
 	allowedHost := "en.wikipedia.org"
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 	q := list.New()
 
-	q.PushBack(startUrl)
-	seen[startUrl] = struct{}{}
-	for q.Len() > 0 && totalPages < maxPages {
-		front := q.Front()
-		q.Remove(front)
+	q.PushBack(startURL)
+	seen[startURL] = struct{}{}
+	for q.Len() > 0 && currentLevel < maxLevels {
+		levelLen := q.Len()
 
-		totalPages += 1
-		value := front.Value.(string)
-		fmt.Printf("Crawling: %s\n", value)
+		for range levelLen {
+			front := q.Front()
+			q.Remove(front)
+			//totalPages += 1
+			value := front.Value.(string)
+			fmt.Printf("Crawling: %s\n", value)
 
-		time.Sleep(delay)
-		doc, err := getURL(client, value)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			continue
+			time.Sleep(delay)
+			doc, err := getURL(client, value)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				continue
+			}
+			if err := extractLinks(doc, value, q, seen, allowedHost); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to extract links: %v\n", err)
+				continue
+			}
 		}
-		if err := extractLinks(doc, value, q, seen, allowedHost); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to extract links: %v\n", err)
-			continue
-		}
+		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
+		currentLevel += 1
+
 	}
-	if totalPages >= maxPages {
-		fmt.Println("Reached maximum pages limit")
+	if currentLevel >= maxLevels {
+		fmt.Println("Reached maximum levels")
 	}
+	// if totalPages >= maxPages {
+	// 	fmt.Println("Reached maximum pages limit")
+	// }
 }
