@@ -41,9 +41,16 @@ func main() {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				continue
 			}
-			if err := crawler.ExtractLinks(doc, value, q, seen, allowedHost); err != nil {
+			links, err := crawler.ExtractLinks(doc, value, allowedHost)
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to extract links: %v\n", err)
 				continue
+			}
+			for _, link := range links {
+				if _, exists := seen[link]; !exists {
+					seen[link] = struct{}{}
+					q.PushBack(link)
+				}
 			}
 		}
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)

@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"container/list"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,12 +17,31 @@ func NormalizeURL(u *url.URL) string {
 	return strings.TrimSuffix(u.String(), "/")
 }
 
-func ExtractLinks(respBody *html.Node, currURL string, q *list.List, seen map[string]struct{}, allowedHost string) error {
+func isValidResolvedURL(resolvedURL *url.URL, allowedHost string) bool {
+	if resolvedURL.Scheme != "http" && resolvedURL.Scheme != "https" {
+		return false
+	}
+	if resolvedURL.Host != allowedHost {
+
+		return false
+	}
+	if !strings.HasPrefix(resolvedURL.Path, "/wiki/") {
+		return false
+	}
+
+	if re.MatchString(resolvedURL.Path) {
+		return false
+	}
+	return true
+}
+
+func ExtractLinks(respBody *html.Node, currURL string, allowedHost string) ([]string, error) {
 
 	baseURL, err := url.Parse(currURL)
+	var links []string
 
 	if err != nil {
-		return fmt.Errorf("Error parsing the URL: %w", err)
+		return []string{}, fmt.Errorf("parsing URL: %w", err)
 	}
 	// Recursive function to traverse the HTML node tree
 
@@ -41,26 +59,12 @@ func ExtractLinks(respBody *html.Node, currURL string, q *list.List, seen map[st
 						continue
 					}
 					resolvedURL := baseURL.ResolveReference(hrefURL)
-					if resolvedURL.Scheme != "http" && resolvedURL.Scheme != "https" {
-						continue
-					}
-					if resolvedURL.Host != allowedHost {
+					if isValidResolvedURL(resolvedURL, allowedHost) {
 
-						continue
-					}
-					if !strings.HasPrefix(resolvedURL.Path, "/wiki/") {
-						continue
+						link := NormalizeURL(resolvedURL)
+						links = append(links, link)
 					}
 
-					if re.MatchString(resolvedURL.Path) {
-						continue
-					}
-					link := NormalizeURL(resolvedURL)
-					_, exists := seen[link]
-					if !exists {
-						seen[link] = struct{}{}
-						q.PushBack(link)
-					}
 				}
 			}
 		}
@@ -68,10 +72,12 @@ func ExtractLinks(respBody *html.Node, currURL string, q *list.List, seen map[st
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			visit(c)
 		}
+
 	}
 
 	visit(respBody)
-	return nil
+	return links, nil
+
 }
 
 func GetURL(client *http.Client, curr string) (*html.Node, error) {

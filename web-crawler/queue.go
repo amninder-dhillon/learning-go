@@ -10,7 +10,7 @@ func (q *Queue) enqueue(val string) {
 
 func (q *Queue) dequeue() (string, error) {
 	if len(*q) == 0 {
-		err := fmt.Errorf("Queue is empty")
+		err := fmt.Errorf("queue is empty")
 		return "", err
 	}
 	front := (*q)[0]
