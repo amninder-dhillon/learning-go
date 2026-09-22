@@ -3,26 +3,37 @@ package main
 import (
 	"container/list"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 	"web-crawler/crawler"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	err := godotenv.Load("../../.env")
+	if err != nil {
+		log.Fatal("Error loading ../../.env file")
+	}
+
 	seen := make(map[string]struct{})
+
 	//maxPages := 100
-	maxLevels := 2
+	maxLevels, _ := strconv.Atoi(os.Getenv("MAX_LEVELS"))
+	env_delay, _ := strconv.Atoi(os.Getenv("DELAY"))
+	delay := time.Duration(env_delay) * time.Millisecond
+	startURL := os.Getenv("START_URL")
+	allowedHost := os.Getenv("ALLOWED_HOST")
+	http_client_timeout, _ := strconv.Atoi(os.Getenv("HTTP_CLIENT_TIMEOUT"))
+	client := &http.Client{
+		Timeout: time.Duration(http_client_timeout) * time.Second,
+	}
 	currentLevel := 0
 	totalPages := 0
-	const delay = 250 * time.Millisecond
-	startURL := "https://en.wikipedia.org/wiki/Miss_Meyers"
-	allowedHost := "en.wikipedia.org"
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
 	q := list.New()
-
 	q.PushBack(startURL)
 	seen[startURL] = struct{}{}
 	for q.Len() > 0 && currentLevel < maxLevels {
