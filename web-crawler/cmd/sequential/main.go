@@ -14,7 +14,7 @@ func main() {
 	//maxPages := 100
 	maxLevels := 2
 	currentLevel := 0
-	//totalPages := 0
+	totalPages := 0
 	const delay = 250 * time.Millisecond
 	startURL := "https://en.wikipedia.org/wiki/Miss_Meyers"
 	allowedHost := "en.wikipedia.org"
@@ -31,7 +31,7 @@ func main() {
 		for range levelLen {
 			front := q.Front()
 			q.Remove(front)
-			//totalPages += 1
+			totalPages += 1
 			value := front.Value.(string)
 			fmt.Printf("Crawling: %s\n", value)
 
@@ -60,6 +60,7 @@ func main() {
 	if currentLevel >= maxLevels {
 		fmt.Println("Reached maximum levels")
 	}
+	fmt.Printf("Total pages crawled by sequential implementation: %d\n", totalPages)
 	// if totalPages >= maxPages {
 	// 	fmt.Println("Reached maximum pages limit")
 	// }
