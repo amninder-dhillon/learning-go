@@ -29,12 +29,15 @@ func main() {
 	seen := make(map[string]struct{})
 
 	//maxPages := 100
+
 	maxLevels, _ := strconv.Atoi(os.Getenv("MAX_LEVELS"))
 	env_delay, _ := strconv.Atoi(os.Getenv("DELAY"))
-	delay := time.Duration(env_delay) * time.Millisecond
 	startURL := os.Getenv("START_URL")
 	allowedHost := os.Getenv("ALLOWED_HOST")
 	http_client_timeout, _ := strconv.Atoi(os.Getenv("HTTP_CLIENT_TIMEOUT"))
+
+	ticker := time.NewTicker(time.Duration(env_delay) * time.Millisecond)
+
 	client := &http.Client{
 		Timeout: time.Duration(http_client_timeout) * time.Second,
 	}
@@ -60,7 +63,7 @@ func main() {
 
 				fmt.Printf("Crawling: %s\n", currURL)
 
-				time.Sleep(delay)
+				<-ticker.C
 				doc, err := crawler.GetURL(client, currURL)
 				if err != nil {
 					results <- CrawlResult{
@@ -83,6 +86,15 @@ func main() {
 		}()
 		currentLevel += 1
 		for result := range results {
+			if result.Err != nil {
+				fmt.Fprintf(
+					os.Stderr,
+					"failed crawling %s: %v\n",
+					result.URL,
+					result.Err,
+				)
+				continue
+			}
 
 			for _, link := range result.Links {
 				if _, exists := seen[link]; exists {
@@ -94,6 +106,7 @@ func main() {
 		}
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
 	}
+	ticker.Stop()
 	if currentLevel >= maxLevels {
 		fmt.Println("Reached maximum levels")
 	}
