@@ -84,7 +84,7 @@ func main() {
 	queue := list.New()
 
 	const numWorkers int = 5
-
+	startTime := time.Now()
 	queue.PushBack(startURL)
 	seen[startURL] = struct{}{}
 	for queue.Len() > 0 && currentLevel < maxLevels {
@@ -134,9 +134,10 @@ func main() {
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
 	}
 	ticker.Stop()
+
 	if currentLevel >= maxLevels {
 		fmt.Println("Reached maximum levels")
 	}
 	fmt.Printf("Total pages crawled by concurrent implementation: %d\n", totalPages)
-
+	fmt.Printf("Total Duration: %v\n", time.Since(startTime))
 }
