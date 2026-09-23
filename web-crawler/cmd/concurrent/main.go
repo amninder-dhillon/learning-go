@@ -20,6 +20,33 @@ type CrawlResult struct {
 	Err   error
 }
 
+func worker(id int, jobs <-chan string, results chan<- CrawlResult, client *http.Client, allowedHost string, ticker *time.Ticker, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for currentURL := range jobs {
+		<-ticker.C
+		fmt.Printf("Worker %d crawling: %s\n", id, currentURL)
+		results <- processURL(currentURL, client, allowedHost)
+	}
+}
+
+func processURL(currentURL string, client *http.Client, allowedHost string) CrawlResult {
+
+	doc, err := crawler.GetURL(client, currentURL)
+	if err != nil {
+		return CrawlResult{
+			Err: err,
+			URL: currentURL,
+		}
+
+	}
+	links, err := crawler.ExtractLinks(doc, currentURL, allowedHost)
+	return CrawlResult{
+		URL:   currentURL,
+		Err:   err,
+		Links: links,
+	}
+}
+
 func main() {
 	err := godotenv.Load("../../.env")
 	if err != nil {
@@ -30,61 +57,59 @@ func main() {
 
 	//maxPages := 100
 
-	maxLevels, _ := strconv.Atoi(os.Getenv("MAX_LEVELS"))
-	env_delay, _ := strconv.Atoi(os.Getenv("DELAY"))
+	maxLevels, err := strconv.Atoi(os.Getenv("MAX_LEVELS"))
+	if err != nil {
+		log.Fatalf("invalid MAX_LEVELS: %v", err)
+	}
+
+	delay, err := strconv.Atoi(os.Getenv("DELAY"))
+	if err != nil {
+		log.Fatalf("invalid DELAY: %v", err)
+	}
+
 	startURL := os.Getenv("START_URL")
 	allowedHost := os.Getenv("ALLOWED_HOST")
-	http_client_timeout, _ := strconv.Atoi(os.Getenv("HTTP_CLIENT_TIMEOUT"))
+	httpClientTimeout, err := strconv.Atoi(os.Getenv("HTTP_CLIENT_TIMEOUT"))
+	if err != nil {
+		log.Fatalf("invalid HTTP_CLIENT_TIMEOUT: %v", err)
+	}
 
-	ticker := time.NewTicker(time.Duration(env_delay) * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(delay) * time.Millisecond)
 
 	client := &http.Client{
-		Timeout: time.Duration(http_client_timeout) * time.Second,
+		Timeout: time.Duration(httpClientTimeout) * time.Second,
 	}
 	currentLevel := 0
 	totalPages := 0
-	q := list.New()
+	queue := list.New()
 
-	q.PushBack(startURL)
+	const numWorkers int = 5
+
+	queue.PushBack(startURL)
 	seen[startURL] = struct{}{}
-	for q.Len() > 0 && currentLevel < maxLevels {
-		levelLen := q.Len()
+	for queue.Len() > 0 && currentLevel < maxLevels {
+		levelLen := queue.Len()
 		results := make(chan CrawlResult, levelLen)
+		jobs := make(chan string)
 		var wg sync.WaitGroup
-
-		for range levelLen {
-			front := q.Front()
-			q.Remove(front)
-			totalPages += 1
-			value := front.Value.(string)
+		for w := range numWorkers {
 			wg.Add(1)
-			go func(currURL string) {
-				defer wg.Done()
-
-				fmt.Printf("Crawling: %s\n", currURL)
-
-				<-ticker.C
-				doc, err := crawler.GetURL(client, currURL)
-				if err != nil {
-					results <- CrawlResult{
-						Err: err,
-						URL: currURL,
-					}
-					return
-				}
-				links, err := crawler.ExtractLinks(doc, currURL, allowedHost)
-				results <- CrawlResult{
-					URL:   currURL,
-					Err:   err,
-					Links: links,
-				}
-			}(value)
+			go worker(w, jobs, results, client, allowedHost, ticker, &wg)
 		}
+		for range levelLen {
+			front := queue.Front()
+			queue.Remove(front)
+			totalPages += 1
+			pageURL := front.Value.(string)
+			jobs <- pageURL
+
+		}
+		close(jobs)
 		go func() {
 			wg.Wait()
 			close(results)
 		}()
-		currentLevel += 1
+
 		for result := range results {
 			if result.Err != nil {
 				fmt.Fprintf(
@@ -101,9 +126,11 @@ func main() {
 					continue
 				}
 				seen[link] = struct{}{}
-				q.PushBack(link)
+				queue.PushBack(link)
 			}
 		}
+
+		currentLevel++
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
 	}
 	ticker.Stop()
