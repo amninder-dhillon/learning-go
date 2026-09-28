@@ -55,7 +55,6 @@ func ExtractLinks(respBody *html.Node, currURL string, allowedHost string) ([]st
 					hrefURL, err := url.Parse(attr.Val)
 
 					if err != nil {
-						fmt.Printf("error parsing the value: %v\n", err)
 						continue
 					}
 					resolvedURL := baseURL.ResolveReference(hrefURL)

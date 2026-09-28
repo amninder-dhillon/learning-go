@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"web-crawler/crawler"
@@ -50,7 +51,7 @@ func processURL(currentURL string, client *http.Client, allowedHost string) Craw
 func main() {
 	err := godotenv.Load("../../.env")
 	if err != nil {
-		log.Fatal("Error loading ../../.env file")
+		log.Fatalf("loading ../../.env file: %v", err)
 	}
 
 	seen := make(map[string]struct{})
@@ -73,8 +74,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid HTTP_CLIENT_TIMEOUT: %v", err)
 	}
+	if maxLevels <= 0 {
+		log.Fatal("MAX_LEVELS must be greater than zero")
+	}
+	if delay <= 0 {
+		log.Fatal("DELAY must be greater than zero")
+	}
+	if strings.TrimSpace(startURL) == "" {
+		log.Fatal("START_URL must not be empty")
+	}
+	if strings.TrimSpace(allowedHost) == "" {
+		log.Fatal("ALLOWED_HOST must not be empty")
+	}
+	if httpClientTimeout <= 0 {
+		log.Fatal("HTTP_CLIENT_TIMEOUT must be greater than zero")
+	}
 
 	ticker := time.NewTicker(time.Duration(delay) * time.Millisecond)
+	defer ticker.Stop()
 
 	client := &http.Client{
 		Timeout: time.Duration(httpClientTimeout) * time.Second,
@@ -89,22 +106,32 @@ func main() {
 	seen[startURL] = struct{}{}
 	for queue.Len() > 0 && currentLevel < maxLevels {
 		levelLen := queue.Len()
-		results := make(chan CrawlResult, levelLen)
 		jobs := make(chan string)
+		results := make(chan CrawlResult)
 		var wg sync.WaitGroup
-		for w := range numWorkers {
+
+		workerCount := numWorkers
+		if levelLen < workerCount {
+			workerCount = levelLen
+		}
+		for w := 0; w < workerCount; w++ {
 			wg.Add(1)
 			go worker(w, jobs, results, client, allowedHost, ticker, &wg)
 		}
+
+		levelURLs := make([]string, 0, levelLen)
 		for range levelLen {
 			front := queue.Front()
 			queue.Remove(front)
 			totalPages += 1
-			pageURL := front.Value.(string)
-			jobs <- pageURL
-
+			levelURLs = append(levelURLs, front.Value.(string))
 		}
-		close(jobs)
+		go func(urls []string) {
+			defer close(jobs)
+			for _, pageURL := range urls {
+				jobs <- pageURL
+			}
+		}(levelURLs)
 		go func() {
 			wg.Wait()
 			close(results)
@@ -133,8 +160,6 @@ func main() {
 		currentLevel++
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
 	}
-	ticker.Stop()
-
 	if currentLevel >= maxLevels {
 		fmt.Println("Reached maximum levels")
 	}
