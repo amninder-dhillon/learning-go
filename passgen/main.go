@@ -1,19 +1,43 @@
 package main
 
-import "fmt"
+import (
+	"flag"
+	"fmt"
+	"os"
+)
 
 func main() {
-	length := 15
-	for range 5 {
+	// if len(os.Args) < 2 {
+	// 	fmt.Fprintln(os.Stderr, "Expected Usage: passgen <cmd> <flags>")
+	// 	os.Exit(1)
+	// }
 
-		fmt.Println(GeneratePassword(length))
-		fmt.Println()
+	if len(os.Args) == 1 {
+		for range 5 {
+			fmt.Println(GeneratePassword(15))
+			fmt.Println()
+		}
+		for range 5 {
+			passphrase, _ := GeneratePassphrase()
+			fmt.Println(passphrase)
+			fmt.Println()
+		}
+		os.Exit(0)
 	}
-
-	for range 5 {
+	switch os.Args[1] {
+	case "password":
+		passwordFlags := flag.NewFlagSet("password", flag.ExitOnError)
+		lenPtr := passwordFlags.Int("len", 15, "Length of password")
+		numPtr := passwordFlags.Int("num", 1, "Number of passwords to generate")
+		passwordFlags.Parse(os.Args[2:])
+		for range *numPtr {
+			fmt.Println()
+			fmt.Println(GeneratePassword(*lenPtr))
+		}
+	case "passphrase":
 		passphrase, _ := GeneratePassphrase()
 		fmt.Println(passphrase)
-		fmt.Println()
+
 	}
 
 }
