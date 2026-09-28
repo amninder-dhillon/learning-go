@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -79,8 +80,8 @@ func ExtractLinks(respBody *html.Node, currURL string, allowedHost string) ([]st
 
 }
 
-func GetURL(client *http.Client, curr string) (*html.Node, error) {
-	req, err := http.NewRequest(http.MethodGet, curr, nil)
+func GetURL(client *http.Client, curr string, ctx context.Context) (*html.Node, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, curr, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}

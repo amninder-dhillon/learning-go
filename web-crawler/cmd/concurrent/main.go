@@ -2,13 +2,16 @@ package main
 
 import (
 	"container/list"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"web-crawler/crawler"
 
@@ -21,18 +24,40 @@ type CrawlResult struct {
 	Err   error
 }
 
-func worker(id int, jobs <-chan string, results chan<- CrawlResult, client *http.Client, allowedHost string, ticker *time.Ticker, wg *sync.WaitGroup) {
+func worker(id int, jobs <-chan string, results chan<- CrawlResult, client *http.Client, allowedHost string, ticker *time.Ticker, wg *sync.WaitGroup, ctx context.Context) {
 	defer wg.Done()
-	for currentURL := range jobs {
-		<-ticker.C
-		fmt.Printf("Worker %d crawling: %s\n", id, currentURL)
-		results <- processURL(currentURL, client, allowedHost)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case currentURL, ok := <-jobs:
+			if !ok {
+				return
+			}
+			select {
+			case <-ctx.Done():
+
+				return
+			case <-ticker.C:
+				fmt.Printf("Worker %d crawling: %s\n", id, currentURL)
+				result := processURL(currentURL, client, allowedHost, ctx)
+				select {
+				case <-ctx.Done():
+
+					return
+				case results <- result:
+
+				}
+
+			}
+		}
 	}
+
 }
 
-func processURL(currentURL string, client *http.Client, allowedHost string) CrawlResult {
+func processURL(currentURL string, client *http.Client, allowedHost string, ctx context.Context) CrawlResult {
 
-	doc, err := crawler.GetURL(client, currentURL)
+	doc, err := crawler.GetURL(client, currentURL, ctx)
 	if err != nil {
 		return CrawlResult{
 			Err: err,
@@ -104,6 +129,22 @@ func main() {
 	startTime := time.Now()
 	queue.PushBack(startURL)
 	seen[startURL] = struct{}{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create a channel to receive OS signals.
+	// A buffer size of 1 so the notifier doesn't block.
+	sigChan := make(chan os.Signal, 1)
+
+	// Notify sigChan when an interrupt (Ctrl+C) or termination signal is received
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	go func() {
+		<-sigChan
+		fmt.Println("\nReceived shutdown signal")
+		cancel()
+	}()
 	for queue.Len() > 0 && currentLevel < maxLevels {
 		levelLen := queue.Len()
 		jobs := make(chan string)
@@ -116,7 +157,7 @@ func main() {
 		}
 		for w := 0; w < workerCount; w++ {
 			wg.Add(1)
-			go worker(w, jobs, results, client, allowedHost, ticker, &wg)
+			go worker(w, jobs, results, client, allowedHost, ticker, &wg, ctx)
 		}
 
 		levelURLs := make([]string, 0, levelLen)
@@ -129,7 +170,13 @@ func main() {
 		go func(urls []string) {
 			defer close(jobs)
 			for _, pageURL := range urls {
-				jobs <- pageURL
+				job := pageURL
+				select {
+				case <-ctx.Done():
+
+					return
+				case jobs <- job:
+				}
 			}
 		}(levelURLs)
 		go func() {
@@ -156,9 +203,12 @@ func main() {
 				queue.PushBack(link)
 			}
 		}
-
+		if ctx.Err() != nil {
+			break
+		}
 		currentLevel++
 		fmt.Printf("Finished Crawling Level: %d\n", currentLevel)
+
 	}
 	if currentLevel >= maxLevels {
 		fmt.Println("Reached maximum levels")
