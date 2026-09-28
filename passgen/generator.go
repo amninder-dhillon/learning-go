@@ -1,10 +1,13 @@
 package main
 
 import (
+	"embed"
 	"math/rand/v2"
-	"os"
 	"strings"
 )
+
+//go:embed .data/word-list.txt
+var wordListFS embed.FS
 
 const LOWERCASE_ALPHABETS = "abcdefghijklmnopqrstuvwxyz"
 const UPPERCASE_ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -59,7 +62,7 @@ func GeneratePassphrase() (string, error) {
 }
 
 func getWordList() ([]string, error) {
-	content, err := os.ReadFile(".data/word-list.txt")
+	content, err := wordListFS.ReadFile(".data/word-list.txt")
 	if err != nil {
 		return nil, err
 	}
