@@ -14,7 +14,7 @@ func main() {
 
 	if len(os.Args) == 1 {
 		for range 5 {
-			fmt.Println(GeneratePassword(15))
+			fmt.Println(GeneratePasswordWithOptions(15, All))
 			fmt.Println()
 		}
 		for range 5 {
@@ -29,10 +29,11 @@ func main() {
 		passwordFlags := flag.NewFlagSet("password", flag.ExitOnError)
 		lenPtr := passwordFlags.Int("len", 15, "Length of password")
 		numPtr := passwordFlags.Int("num", 1, "Number of passwords to generate")
+
 		passwordFlags.Parse(os.Args[2:])
 		for range *numPtr {
 			fmt.Println()
-			fmt.Println(GeneratePassword(*lenPtr))
+			fmt.Println(GeneratePasswordWithOptions(*lenPtr, All))
 		}
 	case "passphrase":
 		passphrase, _ := GeneratePassphrase()

@@ -6,30 +6,38 @@ import (
 	"strings"
 )
 
+type Options int
+
+const (
+	LowerAlpha Options = iota
+	UpperAlpha
+	Numbers
+	Symbols
+	All
+)
+
+var PasswordSpace = map[Options]string{
+	LowerAlpha: "abcdefghijklmnopqrstuvwxyz",
+	UpperAlpha: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	Numbers:    "0123456789",
+	Symbols:    "!@#$%^&*()-_=+[]{}|;:,.<>?/",
+	All:        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}|;:,.<>?/",
+}
+
+func (opt Options) String() string {
+	return PasswordSpace[opt]
+}
+
 //go:embed .data/word-list.txt
 var wordListFS embed.FS
 
-const LOWERCASE_ALPHABETS = "abcdefghijklmnopqrstuvwxyz"
-const UPPERCASE_ALPHABETS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const DIGITS = "0123456789"
-const SYMBOLS = "!@#$%^&*()-_=+[]{}|;:,.<>?/"
-
-func getRandomByte(charType int) byte {
-	switch charType {
-	case 1:
-		index := randomInt(0, 25)
-		return LOWERCASE_ALPHABETS[index]
-	case 2:
-		index := randomInt(0, 25)
-		return UPPERCASE_ALPHABETS[index]
-	case 3:
-		index := randomInt(0, len(DIGITS)-1)
-		return DIGITS[index]
-	case 4:
-		index := randomInt(0, len(SYMBOLS)-1)
-		return SYMBOLS[index]
+func getRandomByte(passwordOption Options) byte {
+	val, ok := PasswordSpace[passwordOption]
+	if !ok {
+		return 0
 	}
-	return 0
+	index := randomInt(0, len(val)-1)
+	return PasswordSpace[passwordOption][index]
 }
 func randomInt(min int, max int) int {
 	return rand.IntN(max-min+1) + min
@@ -38,8 +46,15 @@ func randomInt(min int, max int) int {
 func GeneratePassword(length int) string {
 	var output string
 	for range length {
-		style := randomInt(1, 4)
-		output += string(getRandomByte(style))
+		output += string(getRandomByte(All))
+	}
+	return output
+}
+
+func GeneratePasswordWithOptions(length int, pswdOption Options) string {
+	var output string
+	for range length {
+		output += string(getRandomByte(pswdOption))
 	}
 	return output
 }
